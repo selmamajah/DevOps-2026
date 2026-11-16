@@ -1,0 +1,27 @@
+# Environment and sensitive credentials
+.env
+*.env
+.env.*
+!.env.example
+
+# Runtime logs
+*.log
+logs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+
+# Temporary files & session tokens
+cookies.txt
+*.tmp
+.DS_Store
+
+# Docker volumes and local data
+data/
+pgdata/
+prom-data/
+grafana-data/
