@@ -8,6 +8,38 @@ Repositori ini memuat implementasi praktikum mata kuliah **DevSecOps dan Cloud I
 
 ---
 
+## Arsitektur Terpadu & Alur Data (End-to-End Flow)
+
+Sistem ini menggabungkan jalur logging transaksi aplikasi (Bab 6) dan pemantauan resource server/container (Bab 7) ke dalam satu platform analitik terpadu di Grafana:
+
+```mermaid
+flowchart TD
+    subgraph S_BAB6 ["Bab 06: Jalur Log Transaksi PMB"]
+        U["Browser / User"] --> API["Registration API"]
+        API --> AUTH["Auth Service"]
+        API --> W["Verification Worker"]
+        API -. "stdout (JSON Log)" .-> FB["Fluent Bit :24224"]
+        AUTH -. "stdout (JSON Log)" .-> FB
+        W -. "stdout (JSON Log)" .-> FB
+        FB -->|"Sensor Redact & INSERT"| LDB["PostgreSQL (log-db)"]
+    end
+
+    subgraph S_BAB7 ["Bab 07: Jalur Resource Monitoring"]
+        HOST["Host Linux OS"] --> NE["Node Exporter :9100"]
+        CONT["Container Docker"] --> CAD["cAdvisor :8080"]
+        NE -->|"Pull Scrape 15s"| PROM["Prometheus :9090"]
+        CAD -->|"Pull Scrape 15s"| PROM
+        LOAD["Load Generator"] -->|"Resource Pressure"| CAD
+    end
+
+    subgraph S_VISUAL ["Platform Visualisasi & Analisis"]
+        PROM -->|"PromQL (Metrik)"| GRAF["Grafana :3000"]
+        LDB -.->|"SQL Query (Role: grafana_reader)"| GRAF
+    end
+```
+
+---
+
 ## Struktur Repositori
 
 ```text
@@ -71,15 +103,6 @@ Modul ini mengimplementasikan observabilitas metrik host Linux dan container Doc
   * `cadvisor`: Kolektor metrik konsumsi resource per kontainer (CPU, memory, throttled time).
   * `grafana`: Platform visualisasi analitik terpadu (dashboard metrik PromQL & log SQL).
   * `load-generator`: Kontainer simulasi beban komputasi CPU untuk menguji alerting threshold.
-* **Alur Arsitektur:**
-  ```mermaid
-  flowchart TD
-      N["Node Exporter"] -->|"host metrics"| P["Prometheus"]
-      C["cAdvisor"] -->|"container metrics"| P
-      P -->|"PromQL"| G["Grafana"]
-      D["PostgreSQL Bab 6"] -.->|"log query (read-only)"| G
-      L["Load generator"] -->|"resource pressure"| C
-  ```
 * **Cara Menjalankan:**
   ```bash
   cd bab-07
@@ -104,7 +127,9 @@ Modul ini mengimplementasikan observabilitas metrik host Linux dan container Doc
    * Exporter internal (`cadvisor:8080`, `node-exporter:9100`) tidak dipublikasikan ke host port publik; hanya Prometheus yang dapat mengakses melalui jaringan bridge internal.
 3. **Secret & Credential Management:**
    * Seluruh rahasia, password database, dan admin credential didelegasikan ke file `.env` lokal yang diproteksi oleh `.gitignore`. File yang dipublikasikan ke repositori hanya berupa template `.env.example`.
-4. **Reproducibility & Immutable Infrastructure:**
+4. **Data Redaction & Sanitization:**
+   * Filter redaksi otomatis menyamarkan token rahasia, credential, dan password menjadi `[REDACTED]` pada layer aplikasi sebelum dipancarkan ke log stream.
+5. **Reproducibility & Immutable Infrastructure:**
    * Seluruh container image dipin (*pinned tags*) untuk menjamin konsistensi build dan deployment antar lingkungan.
    * Dashboard dan Data Source Grafana diprovisi secara deklaratif (*Infrastructure as Code*) melalui YAML.
 
