@@ -38,6 +38,24 @@ flowchart TD
     end
 ```
 
+### Penjelasan Runtut Alur Data (Hulu ke Hilir)
+
+1. **Tahap 1: Sumber Data (*Data Sources*)**
+   * **Log Aktivitas (Bab 6):** Interaksi pengguna pada portal PMB (login, pendaftaran) menghasilkan rekaman aktivitas berformat JSON terstruktur yang dipancarkan ke `stdout` oleh `registration-api`, `auth-service`, dan `verification-worker`.
+   * **Metrik Infrastruktur (Bab 7):** Penggunaan resource fisik mesin host Linux dibaca oleh **Node Exporter**, sedangkan metrik isolasi resource per-kontainer Docker dibaca oleh **cAdvisor**.
+
+2. **Tahap 2: Pengumpulan & Pemrosesan Data (*Collection & Processing*)**
+   * **Jalur Log (*Push Method*):** Docker logging driver meneruskan aliran log ke port input **Fluent Bit (`:24224`)**. Fluent Bit memproses log melalui filter redaksi (`redact`) untuk menyamarkan kredensial atau token sensitif menjadi `[REDACTED]`, lalu menyimpannya (*INSERT*) ke dalam skema terisolasi `logs.fluentbit` pada basis data **PostgreSQL (`log-db`)**.
+   * **Jalur Metrik (*Pull/Scrape Method*):** Secara berkala setiap 15 detik, time-series database **Prometheus (`:9090`)** mendatangi endpoint `node-exporter (:9100)` dan `cadvisor (:8080)` untuk menyedot (*scrape*) metrik mentah dan menyimpannya ke dalam Time-Series Storage.
+
+3. **Tahap 3: Evaluasi Ambang Batas (*Alerting Engine*)**
+   * Prometheus secara berkelanjutan mengevaluasi metrik menggunakan aturan turunan (*recording rules*) dan ambang batas (*alerting rules*). Apabila sebuah container melampaui batas wajar (misal konsumsi CPU > 0.3 core selama lebih dari 1 menit), Prometheus secara otomatis mengaktifkan status peringatan (**Alert Firing**) untuk deteksi dini insiden operasional.
+
+4. **Tahap 4: Visualisasi & Observabilitas Terpadu di Grafana (*Single Pane of Glass*)**
+   * Seluruh observabilitas bermuara pada antarmuka **Grafana (`:3000`)**:
+     * **Observabilitas Resource:** Grafana mengeksekusi query PromQL ke Prometheus untuk menghasilkan grafik metrik real-time (utilisasi CPU host, penggunaan memori, top kontainer).
+     * **Observabilitas Keamanan & Audit Log:** Grafana terhubung langsung ke basis data PostgreSQL Bab 6 melalui koneksi aman *least-privilege* (`grafana_reader`) untuk menampilkan tabel log insiden dan jejak audit transaksi.
+
 ---
 
 ## Struktur Repositori
